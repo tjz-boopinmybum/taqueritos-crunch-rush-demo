@@ -1,0 +1,982 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Taqueritos: Crunch Rush Demo</title>
+
+  <!-- Chunky brand-style font. You can swap this for a real Taqueritos brand font if you have one. -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Luckiest+Guy&family=Rubik:wght@700;900&display=swap" rel="stylesheet">
+
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    .game-logo {
+      width: min(700px, 90vw);
+      display: block;
+      margin: 0 auto 10px auto;
+      height: auto;
+    }
+
+    body {
+      min-height: 100vh;
+      font-family: "Rubik", Arial, sans-serif;
+      background: linear-gradient(180deg, #ffcf5c, #f06b32);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      color: #3b1f12;
+    }
+
+    .game-wrap {
+      width: min(960px, 94vw);
+      text-align: center;
+    }
+
+    h1 {
+      font-family: "Luckiest Guy", "Rubik", Arial, sans-serif;
+      font-size: clamp(2.4rem, 6vw, 5rem);
+      color: #fff7d6;
+      text-shadow: 5px 5px 0 #6c2b16, 8px 8px 0 #e13b2f;
+      margin-bottom: 6px;
+      letter-spacing: 2px;
+    }
+
+    .tagline {
+      font-weight: 900;
+      margin-bottom: 16px;
+      color: #5a2413;
+    }
+
+    .hud {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 10px;
+      font-weight: 900;
+      font-family: "Rubik", Arial, sans-serif;
+    }
+
+    .hud div {
+      background: rgba(255, 255, 255, 0.72);
+      padding: 10px 14px;
+      border: 3px solid #6c2b16;
+      border-radius: 12px;
+      box-shadow: 0 4px 0 #6c2b16;
+    }
+
+    canvas {
+      width: 100%;
+      height: auto;
+      background: #87d9ff;
+      border: 5px solid #6c2b16;
+      border-radius: 18px;
+      box-shadow: 0 10px 0 #6c2b16;
+      display: block;
+    }
+
+    .controls {
+      margin-top: 16px;
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    button {
+      cursor: pointer;
+      border: 3px solid #6c2b16;
+      background: #fff7d6;
+      color: #4b2010;
+      padding: 12px 18px;
+      border-radius: 999px;
+      font-family: "Rubik", Arial, sans-serif;
+      font-weight: 900;
+      font-size: 1rem;
+      box-shadow: 0 5px 0 #6c2b16;
+    }
+
+    button:active {
+      transform: translateY(4px);
+      box-shadow: 0 1px 0 #6c2b16;
+    }
+
+    .note {
+      margin-top: 12px;
+      font-size: 0.95rem;
+      font-weight: 900;
+      color: #4b2010;
+    }
+
+    .asset-note {
+      margin-top: 8px;
+      font-size: 0.82rem;
+      font-weight: 700;
+      color: #5a2413;
+      opacity: 0.9;
+    }
+  </style>
+</head>
+<body>
+  <div class="game-wrap">
+    <img src="assets/logo.png" class="game-logo">
+    <h1>Crunch Rush</h1>
+    <p class="tagline">Jump, dodge, collect chips, and outrun the blandness.</p>
+
+    <div class="hud">
+      <div>Score: <span id="score">0</span></div>
+      <div>High Score: <span id="highScore">0</span></div>
+      <div>Discount Progress: <span id="discount">0%</span></div>
+    </div>
+
+    <canvas id="gameCanvas" width="900" height="420"></canvas>
+
+    <div class="controls">
+      <button id="startBtn">Start Game</button>
+      <button id="jumpBtn">Jump / Tap</button>
+      <button id="restartBtn">Restart</button>
+    </div>
+
+    <p class="note">Controls: Space, Arrow Up, W, or tap the Jump button. Reach 1000 points to unlock a 10% discount code demo.</p>
+  </div>
+
+  <script>
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+
+    const scoreEl = document.getElementById("score");
+    const highScoreEl = document.getElementById("highScore");
+    const discountEl = document.getElementById("discount");
+    const startBtn = document.getElementById("startBtn");
+    const jumpBtn = document.getElementById("jumpBtn");
+    const restartBtn = document.getElementById("restartBtn");
+
+    // Put PNG/JPEG files in a folder called "assets" next to this HTML file.
+    // If the files are missing, the game automatically uses drawn fallback shapes.
+    const images = {
+      player: loadImage("/Users/lbb8/index.html/assets/characterOnSkateboard.png"),
+      playerCrouch: loadImage("assets/CharacterCrouching.png"),
+      chip: loadImage("assets/collectable.png"),
+      bag: loadImage("assets/bag.png"),
+      blandEnemy: loadImage("assets/bland_enemy.png"),
+      soggyEnemy: loadImage("assets/soggy-enemy.jpg")
+    };
+
+    function loadImage(src) {
+      const img = new Image();
+      img.src = src;
+      img.loaded = false;
+      img.onload = () => img.loaded = true;
+      img.onerror = () => img.loaded = false;
+      return img;
+    }
+
+    let highScore = Number(localStorage.getItem("taqueritosHighScore")) || 0;
+    highScoreEl.textContent = highScore;
+
+    let gameState = "start";
+    let score = 0;
+    let speed = 5;
+    let frame = 0;
+    let obstacles = [];
+    let chips = [];
+    let particles = [];
+    let floatingTexts = [];
+
+    const groundY = 345;
+
+    class Player {
+  constructor() {
+    this.x = 150;
+
+// hitbox size, not image size
+this.width = 55;
+this.normalHeight = 85;
+this.crouchHeight = 50;
+this.height = this.normalHeight;
+
+this.y = groundY - this.height;
+
+    this.velocityY = 0;
+    this.gravity = 1.3;
+    this.jumpPower = -21.2;
+
+    this.grounded = true;
+    this.crouching = false;
+  }
+
+  jump() {
+    if (this.grounded && gameState === "playing" && !this.crouching) {
+      this.velocityY = this.jumpPower;
+      this.grounded = false;
+    }
+  }
+
+  setCrouch(isCrouching) {
+    if (!this.grounded || gameState !== "playing") return;
+
+    const bottom = this.y + this.height;
+    this.crouching = isCrouching;
+    this.height = this.crouching ? this.crouchHeight : this.normalHeight;
+    this.y = bottom - this.height;
+  }
+
+  update() {
+    this.y += this.velocityY;
+    this.velocityY += this.gravity;
+
+    if (this.y >= groundY - this.height) {
+      this.y = groundY - this.height;
+      this.velocityY = 0;
+      this.grounded = true;
+    }
+  }
+
+  draw() {
+  if (images.player.loaded) {
+    // This stays the same even when the crouch hitbox height changes
+    const playerBottom = this.y + this.height;
+
+    const normalPose = {
+      img: images.player,
+      width: 500,
+      height: 340,
+      x: this.x - 200,
+      y: playerBottom - 340 + 110
+    };
+
+    const crouchPose = {
+      img: images.playerCrouch,
+      width: 500,
+      height: 340,
+      x: this.x - 200,
+      y: playerBottom - 340 + 110
+    };
+
+    const activePose =
+      this.crouching && images.playerCrouch.loaded
+        ? crouchPose
+        : normalPose;
+
+    ctx.drawImage(
+      activePose.img,
+      activePose.x,
+      activePose.y,
+      activePose.width,
+      activePose.height
+    );
+
+
+    //DEBUG PLAYER HITBOX
+    // ctx.strokeStyle = "lime";
+    // ctx.lineWidth = 3;
+    // ctx.strokeRect(this.x, this.y, this.width, this.height);
+
+    return;
+  }
+
+    ctx.save();
+    ctx.translate(this.x + this.width / 2, this.y + this.height / 2);
+    ctx.rotate(this.crouching ? Math.PI / 2 - 0.15 : -0.18);
+
+    const rollGradient = ctx.createLinearGradient(-24, 0, 24, 0);
+    rollGradient.addColorStop(0, "#d46a22");
+    rollGradient.addColorStop(0.35, "#ff9d2e");
+    rollGradient.addColorStop(0.7, "#f05a24");
+    rollGradient.addColorStop(1, "#8f3217");
+
+    ctx.fillStyle = rollGradient;
+    ctx.strokeStyle = "#6c2b16";
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.roundRect(-25, -31, 50, 62, 20);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = "#8f3217";
+    ctx.beginPath();
+    ctx.ellipse(0, -30, 22, 8, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = "#ffbd57";
+    ctx.beginPath();
+    ctx.ellipse(0, 30, 22, 8, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.restore();
+
+    ctx.fillStyle = "#e13b2f";
+    ctx.beginPath();
+    ctx.arc(this.x + 31, this.y + (this.crouching ? 20 : 32), 15, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  }
+}
+
+   class Obstacle {
+  constructor() {
+    this.x = canvas.width + 40;
+    this.x += Math.random() * 60; // add some random horizontal spacing
+
+    this.isFlying = Math.random() > 0.65;
+
+    if (this.isFlying) {
+      this.width = 90;
+      this.height = 40;
+      this.x -=20;
+      this.y = groundY - (85 * (0.9 + Math.random() * 0.3));
+
+      if (this.y > groundY - 90) {
+        this.y = groundY - 90;
+      }
+
+      this.type = "flying";
+    } else {
+      // random size between 80% and 100%
+      this.sizeScale = 0.8 + Math.random() * 0.2;
+
+      this.width = 46 * this.sizeScale;
+      this.height = 46 * this.sizeScale;
+      this.y = groundY - this.height;
+      this.x += 50;
+
+      this.type = "bland";
+    }
+  }
+
+  update() {
+    this.x -= speed;
+  }
+
+  draw() {
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = "#4b2010";
+
+    if (this.isFlying) {
+      ctx.fillStyle = "#e13b2f";
+      ctx.beginPath();
+      ctx.roundRect(this.x, this.y, this.width, this.height, 16);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = "#fff7d6";
+      ctx.font = "900 13px 'Rubik', Arial";
+      ctx.textAlign = "center";
+      ctx.fillText("DUCK!", this.x + this.width / 2, this.y + 25);
+      ctx.textAlign = "left";
+
+      // DEBUG DUCK OBSTACLE HITBOX
+  // ctx.strokeStyle = "blue";
+  // ctx.lineWidth = 3;
+  // ctx.strokeRect(this.x, this.y, this.width, this.height);
+
+      return;
+    }
+
+    const img = images.blandEnemy;
+
+    if (img.loaded) {
+      const cropX = 520;
+      const cropY = 300;
+      const cropWidth = 500;
+      const cropHeight = 500;
+
+      const drawWidth = 235 * this.sizeScale;
+      const drawHeight = 235 * this.sizeScale;
+
+      const drawX = this.x - 82 * this.sizeScale;
+      const drawY = groundY - drawHeight + 90 * this.sizeScale;
+
+      ctx.drawImage(
+        img,
+        cropX,
+        cropY,
+        cropWidth,
+        cropHeight,
+        drawX,
+        drawY,
+        drawWidth,
+        drawHeight
+      );
+
+       // DEBUG DUCK OBSTACLE HITBOX
+  // ctx.strokeStyle = "blue";
+  // ctx.lineWidth = 3;
+  // ctx.strokeRect(this.x, this.y, this.width, this.height);
+
+      return;
+    }
+
+    ctx.fillStyle = "#d8c9aa";
+    ctx.beginPath();
+    ctx.roundRect(this.x, this.y, this.width, this.height, 8);
+    ctx.fill();
+    ctx.stroke();
+  }
+}
+
+    class ChipCollectible {
+  constructor() {
+    this.x = canvas.width + 40;
+    this.baseY = 205 + Math.random() * 80;
+    this.y = this.baseY;
+    this.radius = 17;
+    this.collected = false;
+    this.floatOffset = Math.random() * Math.PI * 2;
+    this.rotation = Math.random() * Math.PI * 2;
+    this.type = Math.random() > 0.78 ? "bag" : "chip";
+  }
+
+  update() {
+    this.x -= speed;
+    this.y = this.baseY + Math.sin(frame * 0.08 + this.floatOffset) * 10;
+    this.rotation += 0.045;
+  }
+
+  draw() {
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.rotate(this.rotation);
+
+    // floating glow
+    const glow = ctx.createRadialGradient(0, 0, 4, 0, 0, 45);
+    glow.addColorStop(0, "rgba(255, 255, 180, 0.95)");
+    glow.addColorStop(0.5, "rgba(255, 184, 51, 0.38)");
+    glow.addColorStop(1, "rgba(255, 184, 51, 0)");
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(0, 0, 45, 0, Math.PI * 2);
+    ctx.fill();
+
+    // sparkle ring
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.8)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(0, 0, 24 + Math.sin(frame * 0.12) * 3, 0, Math.PI * 2);
+    ctx.stroke();
+
+    if (this.type === "bag" && images.bag.loaded) {
+      ctx.drawImage(images.bag, -20, -26, 40, 52);
+    } else if (this.type === "chip" && images.chip.loaded) {
+      ctx.drawImage(images.chip, -38*2, -24*2, 76*2, 48*2);
+    } else if (this.type === "bag") {
+      drawFallbackBag();
+    } else {
+      drawFallbackChip(this.radius);
+    }
+
+    ctx.restore();
+  }
+}
+
+    class Particle {
+      constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.size = 4 + Math.random() * 7;
+        this.vx = -2 + Math.random() * 4;
+        this.vy = -6 + Math.random() * -2;
+        this.gravity = 0.35;
+        this.life = 38;
+        this.maxLife = 38;
+        this.rotation = Math.random() * Math.PI;
+      }
+
+      update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.vy += this.gravity;
+        this.rotation += 0.18;
+        this.life--;
+      }
+
+      draw() {
+        const alpha = this.life / this.maxLife;
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.translate(this.x, this.y);
+        ctx.rotate(this.rotation);
+        ctx.fillStyle = Math.random() > 0.5 ? "#ffd85a" : "#fff7d6";
+        ctx.strokeStyle = "#6c2b16";
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(0, -this.size);
+        ctx.lineTo(this.size, this.size);
+        ctx.lineTo(-this.size, this.size);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+
+    class FloatingText {
+      constructor(text, x, y) {
+        this.text = text;
+        this.x = x;
+        this.y = y;
+        this.life = 48;
+        this.maxLife = 48;
+      }
+
+      update() {
+        this.y -= 1.4;
+        this.life--;
+      }
+
+      draw() {
+        ctx.save();
+        ctx.globalAlpha = this.life / this.maxLife;
+        ctx.font = "28px 'Luckiest Guy', Arial";
+        ctx.textAlign = "center";
+        ctx.lineWidth = 5;
+        ctx.strokeStyle = "#6c2b16";
+        ctx.fillStyle = "#fff7d6";
+        ctx.strokeText(this.text, this.x, this.y);
+        ctx.fillText(this.text, this.x, this.y);
+        ctx.restore();
+      }
+    }
+
+    const player = new Player();
+
+    function drawFallbackChip(radius) {
+      const rollGradient = ctx.createLinearGradient(-radius, 0, radius, 0);
+      rollGradient.addColorStop(0, "#d46a22");
+      rollGradient.addColorStop(0.35, "#ff9d2e");
+      rollGradient.addColorStop(0.7, "#f05a24");
+      rollGradient.addColorStop(1, "#8f3217");
+
+      ctx.fillStyle = rollGradient;
+      ctx.strokeStyle = "#6c2b16";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.roundRect(-radius * 0.8, -radius * 1.35, radius * 1.6, radius * 2.7, radius * 0.65);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = "#8f3217";
+      ctx.beginPath();
+      ctx.ellipse(0, -radius * 1.32, radius * 0.7, radius * 0.28, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = "#ffbd57";
+      ctx.beginPath();
+      ctx.ellipse(0, radius * 1.32, radius * 0.7, radius * 0.28, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = "rgba(108, 43, 22, 0.35)";
+      ctx.beginPath();
+      ctx.arc(-5, -8, 1.8, 0, Math.PI * 2);
+      ctx.arc(6, -1, 1.6, 0, Math.PI * 2);
+      ctx.arc(2, 9, 1.5, 0, Math.PI * 2);
+      ctx.arc(-7, 11, 1.3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    function drawFallbackBag() {
+      ctx.fillStyle = "#e13b2f";
+      ctx.strokeStyle = "#6c2b16";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.roundRect(-18, -24, 36, 48, 6);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = "#fff7d6";
+      ctx.font = "10px 'Luckiest Guy', Arial";
+      ctx.textAlign = "center";
+      ctx.fillText("TAQ", 0, -2);
+      ctx.fillStyle = "#ffd85a";
+      ctx.save();
+      ctx.translate(0, 11);
+      ctx.rotate(-0.15);
+      ctx.beginPath();
+      ctx.roundRect(-7, -11, 14, 25, 6);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = "#f05a24";
+      ctx.beginPath();
+      ctx.ellipse(0, -11, 6, 2.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function spawnPickupEffect(x, y, amount) {
+      for (let i = 0; i < amount; i++) {
+        particles.push(new Particle(x, y));
+      }
+      floatingTexts.push(new FloatingText("CRUNCH!", x, y - 20));
+    }
+
+    function resetGame() {
+      gameState = "playing";
+      player.height = player.normalHeight;
+      player.crouching = false;
+      score = 0;
+      speed = 5;
+      frame = 0;
+      obstacles = [];
+      chips = [];
+      particles = [];
+      floatingTexts = [];
+      player.y = groundY - player.height;
+      player.velocityY = 0;
+      player.grounded = true;
+      updateHud();
+    }
+
+    function updateHud() {
+      scoreEl.textContent = Math.floor(score);
+      highScoreEl.textContent = highScore;
+      const progress = Math.min(100, Math.floor((score / 1000) * 100));
+      discountEl.textContent = progress + "%";
+    }
+
+    function isColliding(a, b) {
+      return (
+        a.x < b.x + b.width &&
+        a.x + a.width > b.x &&
+        a.y < b.y + b.height &&
+        a.y + a.height > b.y
+      );
+    }
+
+    function isCollecting(player, chip) {
+      const closestX = Math.max(player.x, Math.min(chip.x, player.x + player.width));
+      const closestY = Math.max(player.y, Math.min(chip.y, player.y + player.height));
+      const dx = chip.x - closestX;
+      const dy = chip.y - closestY;
+      return dx * dx + dy * dy < chip.radius * chip.radius;
+    }
+
+    function drawBackground() {
+  const darkBg = "#05090d";
+  const green = "rgb(31, 166, 89)";
+  const blue = "rgb(0, 174, 234)";
+  const orange = "rgb(255, 166, 31)";
+
+  ctx.fillStyle = darkBg;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // subtle radial glow
+  const bgGlow = ctx.createRadialGradient(
+    canvas.width / 2,
+    canvas.height / 2,
+    40,
+    canvas.width / 2,
+    canvas.height / 2,
+    520
+  );
+  bgGlow.addColorStop(0, "rgba(0, 174, 234, 0.10)");
+  bgGlow.addColorStop(0.5, "rgba(31, 166, 89, 0.06)");
+  bgGlow.addColorStop(1, "rgba(0, 0, 0, 0)");
+  ctx.fillStyle = bgGlow;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  const scroll = frame * speed * 0.18;
+
+  function lightningBolt(x, y, w, h, color, alpha = 1) {
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(x + w * 0.55, y);
+    ctx.lineTo(x + w * 0.15, y + h * 0.48);
+    ctx.lineTo(x + w * 0.45, y + h * 0.48);
+    ctx.lineTo(x + w * 0.25, y + h);
+    ctx.lineTo(x + w * 0.85, y + h * 0.38);
+    ctx.lineTo(x + w * 0.55, y + h * 0.38);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function triangle(x, y, size, color, rotation = 0, alpha = 1) {
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.translate(x, y);
+    ctx.rotate(rotation);
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(0, -size);
+    ctx.lineTo(size, size);
+    ctx.lineTo(-size, size);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function outlineDiamond(x, y, size, color, alpha = 1) {
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(x, y - size);
+    ctx.lineTo(x + size, y);
+    ctx.lineTo(x, y + size);
+    ctx.lineTo(x - size, y);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function speedLines(x, y, color, alpha = 1) {
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 4;
+    ctx.lineCap = "round";
+    for (let i = 0; i < 4; i++) {
+      ctx.beginPath();
+      ctx.moveTo(x, y + i * 13);
+      ctx.lineTo(x + 105, y - 42 + i * 13);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function dotGrid(x, y, color, alpha = 1) {
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = color;
+    for (let row = 0; row < 4; row++) {
+      for (let col = 0; col < 6; col++) {
+        ctx.beginPath();
+        ctx.arc(x + col * 14, y + row * 14, 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    ctx.restore();
+  }
+
+  function circle(x, y, r, color, alpha = 1) {
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // slowly scrolling geometric shapes
+  const offset = -(scroll % canvas.width);
+
+  for (let layer = 0; layer < 2; layer++) {
+    const xShift = offset + layer * canvas.width;
+
+    lightningBolt(xShift + 80, 35, 190, 250, blue, 0.9);
+    lightningBolt(xShift + 575, 160, 130, 140, green, 0.9);
+    lightningBolt(xShift + 745, 55, 180, 240, orange, 0.95);
+
+    triangle(xShift + 470, 70, 120, green, 0.25, 0.8);
+    triangle(xShift + 120, 335, 90, green, -0.65, 0.9);
+    triangle(xShift + 505, 360, 120, orange, 0.2, 0.85);
+    triangle(xShift + 815, 355, 95, blue, 0.55, 0.85);
+
+    outlineDiamond(xShift + 365, 115, 38, green, 0.85);
+    outlineDiamond(xShift + 655, 250, 25, orange, 0.85);
+
+    speedLines(xShift + 170, 230, blue, 0.8);
+    speedLines(xShift + 575, 205, green, 0.75);
+    speedLines(xShift + 705, 90, blue, 0.85);
+
+    dotGrid(xShift + 415, 30, green, 0.75);
+    dotGrid(xShift + 575, 325, blue, 0.75);
+
+    circle(xShift + 62, 292, 14, orange, 0.95);
+    circle(xShift + 602, 285, 12, green, 0.9);
+    circle(xShift + 618, 136, 12, blue, 0.9);
+  }
+
+  // ground
+  ctx.fillStyle = "#11161b";
+  ctx.fillRect(0, groundY, canvas.width, canvas.height - groundY);
+
+  ctx.fillStyle = "#1f1f1f";
+  ctx.fillRect(0, groundY, canvas.width, 18);
+
+  // neon ground trim
+  ctx.fillStyle = blue;
+  ctx.fillRect(0, groundY, canvas.width, 4);
+
+  ctx.fillStyle = green;
+  ctx.fillRect(0, groundY + 5, canvas.width, 3);
+
+  // moving lane marks
+  ctx.fillStyle = orange;
+  for (let i = 0; i < 20; i++) {
+    const x = ((i * 90 - frame * speed) % 1100) - 120;
+    ctx.fillRect(x, groundY + 10, 45, 5);
+  }
+}
+
+    function drawStartScreen() {
+      drawBackground();
+      player.draw();
+      ctx.fillStyle = "rgba(255, 247, 214, 0.92)";
+      ctx.fillRect(180, 88, 540, 185);
+      ctx.strokeStyle = "#6c2b16";
+      ctx.lineWidth = 5;
+      ctx.strokeRect(180, 88, 540, 185);
+
+      ctx.fillStyle = "#4b2010";
+      ctx.font = "46px 'Luckiest Guy', Arial";
+      ctx.textAlign = "center";
+      ctx.fillText("Crunch Rush Demo", canvas.width / 2, 150);
+      ctx.font = "900 14px 'Rubik', Arial";
+      ctx.fillText("Collect glowing chips, avoid bland enemies, and chase the high score.", canvas.width / 2, 195);
+      ctx.fillText("Press Start or Space to play.", canvas.width / 2, 230);
+      ctx.textAlign = "left";
+    }
+
+    function drawGameOverScreen() {
+      ctx.fillStyle = "rgba(75, 32, 16, 0.75)";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      ctx.fillStyle = "#fff7d6";
+      ctx.textAlign = "center";
+      ctx.font = "56px 'Luckiest Guy', Arial";
+      ctx.fillText("Game Over", canvas.width / 2, 145);
+      ctx.font = "900 24px 'Rubik', Arial";
+      ctx.fillText("Final Score: " + Math.floor(score), canvas.width / 2, 190);
+
+      if (score >= 1000) {
+        ctx.fillStyle = "#ffd85a";
+        ctx.fillText("10% Discount Code Unlocked: CRUNCH10", canvas.width / 2, 235);
+      } else {
+        ctx.fillText("Reach 1000 points to unlock the Special Discount Code", canvas.width / 2, 235);
+      }
+
+      ctx.fillStyle = "#fff7d6";
+      ctx.font = "900 18px 'Rubik', Arial";
+      ctx.fillText("Press Restart or Space to try again.", canvas.width / 2, 280);
+      ctx.textAlign = "left";
+    }
+
+    function updateGame() {
+      frame++;
+      score += 0.25;
+      speed += 0.0030;
+
+      player.update();
+
+      let obstacleRate = Math.max(55, 95 - Math.floor(speed * 4));
+
+      if (frame % obstacleRate === 0) {
+        obstacles.push(new Obstacle()); 
+      }   
+
+      if (frame % 68 === 0) {
+        chips.push(new ChipCollectible());
+      }
+
+      obstacles.forEach(obstacle => obstacle.update());
+      chips.forEach(chip => chip.update());
+      particles.forEach(particle => particle.update());
+      floatingTexts.forEach(text => text.update());
+
+      obstacles = obstacles.filter(obstacle => obstacle.x + obstacle.width > -20);
+      chips = chips.filter(chip => chip.x + chip.radius > -20 && !chip.collected);
+      particles = particles.filter(particle => particle.life > 0);
+      floatingTexts = floatingTexts.filter(text => text.life > 0);
+
+      obstacles.forEach(obstacle => {
+        if (isColliding(player, obstacle)) {
+          gameState = "gameover";
+          if (score > highScore) {
+            highScore = Math.floor(score);
+            localStorage.setItem("taqueritosHighScore", highScore);
+          }
+        }
+      });
+
+      chips.forEach(chip => {
+        if (isCollecting(player, chip)) {
+          chip.collected = true;
+          score += chip.type === "bag" ? 150 : 75;
+          spawnPickupEffect(chip.x, chip.y, chip.type === "bag" ? 22 : 14);
+        }
+      });
+
+      updateHud();
+    }
+
+    function drawGame() {
+      drawBackground();
+      chips.forEach(chip => chip.draw());
+      obstacles.forEach(obstacle => obstacle.draw());
+      player.draw();
+      particles.forEach(particle => particle.draw());
+      floatingTexts.forEach(text => text.draw());
+
+      ctx.fillStyle = "#6c2b16";
+      ctx.font = "900 18px 'Rubik', Arial";
+      ctx.fillText("Speed: " + speed.toFixed(1), 20, 34);
+    }
+
+    function gameLoop() {
+      if (gameState === "start") {
+        drawStartScreen();
+      } else if (gameState === "playing") {
+        updateGame();
+        drawGame();
+      } else if (gameState === "gameover") {
+        drawGame();
+        drawGameOverScreen();
+      }
+
+      requestAnimationFrame(gameLoop);
+    }
+
+    function handleJumpOrStart() {
+      if (gameState === "start" || gameState === "gameover") {
+        resetGame();
+      } else {
+        player.jump();
+      }
+    }
+
+    startBtn.addEventListener("click", resetGame);
+    restartBtn.addEventListener("click", resetGame);
+    jumpBtn.addEventListener("click", handleJumpOrStart);
+
+    document.addEventListener("keydown", event => {
+  if (["Space", "ArrowUp", "KeyW"].includes(event.code)) {
+    event.preventDefault();
+    handleJumpOrStart();
+  }
+
+  if (["ArrowDown", "KeyS"].includes(event.code)) {
+    event.preventDefault();
+    player.setCrouch(true);
+  }
+});
+
+document.addEventListener("keyup", event => {
+  if (["ArrowDown", "KeyS"].includes(event.code)) {
+    event.preventDefault();
+    player.setCrouch(false);
+  }
+});
+
+    canvas.addEventListener("pointerdown", handleJumpOrStart);
+
+    gameLoop();
+  </script>
+</body>
+</html>
