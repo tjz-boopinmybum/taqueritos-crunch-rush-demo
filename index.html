@@ -161,8 +161,8 @@
     // Put PNG/JPEG files in a folder called "assets" next to this HTML file.
     // If the files are missing, the game automatically uses drawn fallback shapes.
     const images = {
-      player: loadImage("assets/characterOnSkateboard.png"),
-      playerCrouch: loadImage("assets/CharacterCrouching.png"),
+      player: loadImage("assets/CharacterOnBoardGreen.png"),
+      playerCrouch: loadImage("assets/CharacterCrouchingGreen.png"),
       chip: loadImage("assets/collectable.png"),
       bag: loadImage("assets/bag.png"),
       blandEnemy: loadImage("assets/bland_enemy.png"),
@@ -178,6 +178,101 @@
       img.onload = () => img.loaded = true;
       img.onerror = () => img.loaded = false;
       return img;
+    }
+
+    const musicTracks = [
+      "audio/music/video-game-music_loop-01.wav",
+      "audio/music/video-game-music_loop-02.wav",
+      "audio/music/video-game-music_loop-03.wav",
+      "audio/music/video-game-music_loop-04.wav",
+      "audio/music/video-game-music_loop-05.wav",
+      "audio/music/video-game-music_loop-06.wav"
+    ];
+
+    let currentMusic = null;
+    let musicFadeInterval = null;
+
+    const sounds = {
+      jump: new Audio("audio/SFX/JumpSound.wav"),
+      land: new Audio("audio/SFX/LandingSound.wav"),
+      collect: new Audio("audio/SFX/CollectableSound.wav"),
+      powerup: new Audio("audio/SFX/PowerUpSound.wav"),
+      death: new Audio("audio/SFX/DeathSound.wav")
+    };
+
+    sounds.jump.volume = 1;
+    sounds.land.volume = 0.65;
+    sounds.collect.volume = 0.5;
+    sounds.powerup.volume = 0.65;
+    sounds.death.volume = 0.8;
+
+    function playSound(sound) {
+      sound.currentTime = 0;
+      sound.play().catch(() => {});
+    }
+
+    function startRandomMusic() {
+      if (musicFadeInterval) {
+        clearInterval(musicFadeInterval);
+        musicFadeInterval = null;
+      }
+
+      if (currentMusic) {
+        currentMusic.pause();
+        currentMusic.currentTime = 0;
+      }
+
+      const randomTrack = musicTracks[Math.floor(Math.random() * musicTracks.length)];
+
+      currentMusic = new Audio(randomTrack);
+      currentMusic.loop = true;
+      currentMusic.volume = 0.35;
+      currentMusic.play().catch(() => {});
+    }
+
+    function fadeOutMusic(duration = 900) {
+      if (!currentMusic) return;
+
+      if (musicFadeInterval) {
+        clearInterval(musicFadeInterval);
+      }
+
+      const startVolume = currentMusic.volume;
+      const steps = 30;
+      const intervalTime = duration / steps;
+
+      musicFadeInterval = setInterval(() => {
+        currentMusic.volume = Math.max(0, currentMusic.volume - startVolume / steps);
+
+        if (currentMusic.volume <= 0.01) {
+          currentMusic.pause();
+          currentMusic.currentTime = 0;
+          currentMusic.volume = startVolume;
+          clearInterval(musicFadeInterval);
+          musicFadeInterval = null;
+        }
+      }, intervalTime);
+    }
+
+    function playDeathSoundWithFade() {
+      fadeOutMusic(1300);
+
+      sounds.death.currentTime = 0;
+      sounds.death.volume = 0.7;
+      sounds.death.play().catch(() => {});
+
+      let deathVolume = 0;
+      const targetVolume = 0.8;
+      const steps = 20;
+
+      const deathFade = setInterval(() => {
+        deathVolume += targetVolume / steps;
+        sounds.death.volume = Math.min(targetVolume, deathVolume);
+
+        if (sounds.death.volume >= targetVolume) {
+          clearInterval(deathFade);
+        }
+      }, 35);
     }
 
     let highScore = Number(localStorage.getItem("taqueritosHighScore")) || 0;
@@ -234,6 +329,7 @@
     if (this.grounded && gameState === "playing" && !this.crouching) {
       this.velocityY = this.jumpPower;
       this.grounded = false;
+      playSound(sounds.jump);
     }
   }
 
@@ -251,9 +347,15 @@
     this.velocityY += this.gravity;
 
     if (this.y >= groundY - this.height) {
+      const wasInAir = !this.grounded;
+
       this.y = groundY - this.height;
       this.velocityY = 0;
       this.grounded = true;
+
+      if (wasInAir) {
+        playSound(sounds.land);
+      }
     }
   }
 
@@ -267,7 +369,7 @@
       width: 500,
       height: 340,
       x: this.x - 200,
-      y: playerBottom - 340 + 110
+      y: playerBottom - 340 + 115
     };
 
     const crouchPose = {
@@ -275,7 +377,7 @@
       width: 500,
       height: 340,
       x: this.x - 200,
-      y: playerBottom - 340 + 110
+      y: playerBottom - 340 + 115
     };
 
     const activePose =
@@ -777,6 +879,7 @@ applyEffect() {
 
     function resetGame() {
       gameState = "playing";
+      startRandomMusic();
       player.height = player.normalHeight;
       player.crouching = false;
       score = 0;
@@ -1174,6 +1277,7 @@ applyEffect() {
       obstacles.forEach(obstacle => {
         if (isColliding(player, obstacle)) {
           if (!shieldActive) {
+            playDeathSoundWithFade();
             gameState = "gameover";
 
             if (score > highScore) {
@@ -1187,6 +1291,7 @@ applyEffect() {
       chips.forEach(chip => {
         if (isCollecting(player, chip)) {
           chip.collected = true;
+          playSound(sounds.collect);
 
           scoreMultiplier = 1 + chipCombo * 0.1;
 
@@ -1215,6 +1320,7 @@ applyEffect() {
       powerUps.forEach(powerUp => {
         if (isCollectingPowerUp(player, powerUp)) {
           powerUp.collected = true;
+          playSound(sounds.powerup);
           powerUp.applyEffect();
 
           floatingTexts.push(new FloatingText("SHIELD!", powerUp.x, powerUp.y - 20));
