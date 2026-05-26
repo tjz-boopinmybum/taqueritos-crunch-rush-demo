@@ -166,7 +166,9 @@
       chip: loadImage("assets/collectable.png"),
       bag: loadImage("assets/bag.png"),
       blandEnemy: loadImage("assets/bland_enemy.png"),
-      soggyEnemy: loadImage("assets/soggy-enemy.jpg")
+      soggyEnemy: loadImage("assets/soggy-enemy.jpg"),
+      shield: loadImage("assets/shield.png"),
+      magnet: loadImage("assets/magnet.png")
     };
 
     function loadImage(src) {
@@ -183,34 +185,50 @@
 
     let gameState = "start";
     let score = 0;
-    let speed = 5;
+    let speed = 6;
     let frame = 0;
     let obstacles = [];
     let chips = [];
+    let powerUps = [];
     let particles = [];
     let floatingTexts = [];
+    let shieldActive = false;
+    let shieldTimer = 0;
+    const shieldDuration = (600*(7/10));      // 10 seconds
+    const shieldBlinkDuration = 180; // 3 seconds
+    let doublePointsActive = false;
+    let doublePointsTimer = 0;
+    const doublePointsDuration = 600; // 10 seconds
+    let magnetActive = false;
+    let magnetTimer = 0;
+    const magnetDuration = 600;
+
+
+    let chipCombo = 0;
+    let comboTimer = 0;
+    let scoreMultiplier = 1;
 
     const groundY = 345;
 
     class Player {
-  constructor() {
-    this.x = 150;
+      constructor() {
+        this.x = 150;
 
-// hitbox size, not image size
-this.width = 55;
-this.normalHeight = 85;
-this.crouchHeight = 50;
-this.height = this.normalHeight;
+    // hitbox size, not image size
+    this.width = 55;
+    this.normalHeight = 85;
+    this.crouchHeight = 50;
+    this.height = this.normalHeight;
 
-this.y = groundY - this.height;
+    this.y = groundY - this.height;
 
-    this.velocityY = 0;
-    this.gravity = 1.3;
-    this.jumpPower = -21.2;
+        this.velocityY = 0;
+        this.gravity = 1.3;
+        this.jumpPower = -21.2;
 
-    this.grounded = true;
-    this.crouching = false;
-  }
+        this.grounded = true;
+        this.crouching = false;
+      }
 
   jump() {
     if (this.grounded && gameState === "playing" && !this.crouching) {
@@ -433,6 +451,8 @@ this.y = groundY - this.height;
     this.collected = false;
     this.floatOffset = Math.random() * Math.PI * 2;
     this.rotation = Math.random() * Math.PI * 2;
+    const rand = Math.random();
+
     this.type = Math.random() > 0.78 ? "bag" : "chip";
   }
 
@@ -478,6 +498,139 @@ this.y = groundY - this.height;
   }
 }
 
+
+class PowerUp {
+  constructor(type = "shield") {
+    this.x = canvas.width + 40;
+    this.baseY = 180 + Math.random() * 90;
+    this.y = this.baseY;
+    this.width = 80 *2;
+    this.height = 60*2;
+    this.type = type;
+    this.collected = false;
+    this.floatOffset = Math.random() * Math.PI * 2;
+    this.rotation = 0;
+    this.hitboxWidth = 55;
+    this.hitboxHeight = 55;
+    
+  }
+
+  update() {
+    this.x -= speed;
+    this.y = this.baseY + Math.sin(frame * 0.08 + this.floatOffset) * 10;
+    //this.rotation += 0.025;
+  }
+
+  draw() {
+  ctx.save();
+
+  ctx.translate(this.x, this.y);
+  //ctx.rotate(this.rotation);
+
+  // glow behind shield
+  const glow = ctx.createRadialGradient(0, 0, 4, 0, 0, 48);
+  glow.addColorStop(0, "rgba(0, 174, 234, 0.75)");
+  glow.addColorStop(0.6, "rgba(0, 174, 234, 0.25)");
+  glow.addColorStop(1, "rgba(0, 174, 234, 0)");
+
+  ctx.fillStyle = glow;
+  ctx.beginPath();
+  ctx.arc(0, 0, 48, 0, Math.PI * 2);
+  ctx.fill();
+
+  // shield image
+  if (this.type === "shield" && images.shield.loaded) {
+    ctx.drawImage(
+      images.shield,
+      -this.width / 2,
+      -this.height / 2,
+      this.width,
+      this.height
+    );
+  }
+
+  else if (this.type === "doublePoints") {
+  // outer glow
+  const glow = ctx.createRadialGradient(0, 0, 4, 0, 0, 52);
+  glow.addColorStop(0, "rgba(255, 166, 31, 0.75)");
+  glow.addColorStop(0.55, "rgba(255, 166, 31, 0.28)");
+  glow.addColorStop(1, "rgba(255, 166, 31, 0)");
+
+  ctx.fillStyle = glow;
+  ctx.beginPath();
+  ctx.arc(0, 0, 52, 0, Math.PI * 2);
+  ctx.fill();
+
+  // bubble outline only
+  ctx.strokeStyle = "rgba(255, 247, 214, 0.95)";
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.arc(0, 0, 34, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // subtle inner ring
+  ctx.strokeStyle = "rgba(255, 166, 31, 0.75)";
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.arc(0, 0, 27, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // 2X text
+  ctx.font = "900 28px 'Rubik'";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+
+  ctx.lineWidth = 5;
+  ctx.strokeStyle = "#05090d";
+  ctx.fillStyle = "#ffa61f";
+
+  ctx.strokeText("2X", 0, 2);
+  ctx.fillText("2X", 0, 2);
+
+  ctx.textBaseline = "alphabetic";
+}
+
+else if (this.type === "magnet" && images.magnet.loaded) {
+  ctx.drawImage(
+    images.magnet,
+    -this.width / 2 - this.width/2,
+    -this.height / 2 - this.height/2,
+    this.width* 2,
+    this.height * 2
+  );
+}
+
+  // DEBUG POWERUP HITBOX
+  // ctx.strokeStyle = "cyan";
+  // ctx.lineWidth = 3;
+  // ctx.strokeRect(
+  //   -this.hitboxWidth / 2,
+  //   -this.hitboxHeight / 2,
+  //   this.hitboxWidth,
+  //   this.hitboxHeight
+  // );
+
+  ctx.restore();
+}
+applyEffect() {
+  if (this.type === "shield") {
+    shieldActive = true;
+    shieldTimer = shieldDuration + shieldBlinkDuration;
+  }
+
+  if (this.type === "doublePoints") {
+    doublePointsActive = true;
+    doublePointsTimer = doublePointsDuration;
+  }
+
+  if (this.type === "magnet") {
+    magnetActive = true;
+    magnetTimer = magnetDuration;
+  }
+}
+
+}
+
     class Particle {
       constructor(x, y) {
         this.x = x;
@@ -520,13 +673,14 @@ this.y = groundY - this.height;
     }
 
     class FloatingText {
-      constructor(text, x, y) {
-        this.text = text;
-        this.x = x;
-        this.y = y;
-        this.life = 48;
-        this.maxLife = 48;
-      }
+      constructor(text, x, y, color = "#fff7d6") {
+      this.text = text;
+      this.x = x;
+      this.y = y;
+      this.color = color;
+      this.life = 48;
+      this.maxLife = 48;
+    }
 
       update() {
         this.y -= 1.4;
@@ -540,7 +694,7 @@ this.y = groundY - this.height;
         ctx.textAlign = "center";
         ctx.lineWidth = 5;
         ctx.strokeStyle = "#6c2b16";
-        ctx.fillStyle = "#fff7d6";
+        ctx.fillStyle = this.color;
         ctx.strokeText(this.text, this.x, this.y);
         ctx.fillText(this.text, this.x, this.y);
         ctx.restore();
@@ -626,15 +780,25 @@ this.y = groundY - this.height;
       player.height = player.normalHeight;
       player.crouching = false;
       score = 0;
-      speed = 5;
+      speed = 6;
       frame = 0;
       obstacles = [];
       chips = [];
       particles = [];
       floatingTexts = [];
+      powerUps = [];
+      shieldActive = false;
+      shieldTimer = 0;
+      chipCombo = 0;
+      comboTimer = 0;
+      scoreMultiplier = 1;
       player.y = groundY - player.height;
       player.velocityY = 0;
       player.grounded = true;
+      doublePointsActive = false;
+      doublePointsTimer = 0;
+      magnetActive = false;
+      magnetTimer = 0;
       updateHud();
     }
 
@@ -661,6 +825,15 @@ this.y = groundY - this.height;
       const dy = chip.y - closestY;
       return dx * dx + dy * dy < chip.radius * chip.radius;
     }
+
+    function isCollectingPowerUp(player, powerUp) {
+  return (
+    player.x < powerUp.x + powerUp.hitboxWidth / 2 &&
+    player.x + player.width > powerUp.x - powerUp.hitboxWidth / 2 &&
+    player.y < powerUp.y + powerUp.hitboxHeight / 2 &&
+    player.y + player.height > powerUp.y - powerUp.hitboxHeight / 2
+  );
+}
 
     function drawBackground() {
   const darkBg = "#05090d";
@@ -845,33 +1018,89 @@ this.y = groundY - this.height;
     }
 
     function drawGameOverScreen() {
-      ctx.fillStyle = "rgba(75, 32, 16, 0.75)";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = "rgba(5, 9, 13, 0.78)";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      ctx.fillStyle = "#fff7d6";
-      ctx.textAlign = "center";
-      ctx.font = "56px 'Luckiest Guy', Arial";
-      ctx.fillText("Game Over", canvas.width / 2, 145);
-      ctx.font = "900 24px 'Rubik', Arial";
-      ctx.fillText("Final Score: " + Math.floor(score), canvas.width / 2, 190);
+  ctx.textAlign = "center";
 
-      if (score >= 1000) {
-        ctx.fillStyle = "#ffd85a";
-        ctx.fillText("10% Discount Code Unlocked: CRUNCH10", canvas.width / 2, 235);
-      } else {
-        ctx.fillText("Reach 1000 points to unlock the Special Discount Code", canvas.width / 2, 235);
-      }
+  // container box
+  ctx.fillStyle = "rgba(255, 247, 214, 0.94)";
+  ctx.strokeStyle = "#05090d";
+  ctx.lineWidth = 6;
+  ctx.beginPath();
+  ctx.roundRect(180, 70, 540, 265, 24);
+  ctx.fill();
+  ctx.stroke();
 
-      ctx.fillStyle = "#fff7d6";
-      ctx.font = "900 18px 'Rubik', Arial";
-      ctx.fillText("Press Restart or Space to try again.", canvas.width / 2, 280);
-      ctx.textAlign = "left";
-    }
+  // title
+  ctx.font = "64px 'Luckiest Guy'";
+  ctx.lineWidth = 6;
+  ctx.strokeStyle = "#05090d";
+  ctx.fillStyle = "#ffa61f";
+  ctx.strokeText("Game Over", canvas.width / 2, 140);
+  ctx.fillText("Game Over", canvas.width / 2, 140);
+
+  // score
+  ctx.font = "900 28px 'Rubik'";
+  ctx.fillStyle = "#05090d";
+  ctx.fillText("Final Score: " + Math.floor(score), canvas.width / 2, 190);
+
+  // discount
+  ctx.font = "900 22px 'Rubik'";
+  if (score >= 1000) {
+    ctx.fillStyle = "#1fa659";
+    ctx.fillText("10% Code Unlocked: CRUNCH10", canvas.width / 2, 235);
+  } else {
+    ctx.fillStyle = "#00aeea";
+    ctx.fillText("Reach 1000 points to unlock a code", canvas.width / 2, 235);
+  }
+
+  // button
+  ctx.fillStyle = "#ffa61f";
+  ctx.strokeStyle = "#05090d";
+  ctx.lineWidth = 5;
+  ctx.beginPath();
+  ctx.roundRect(330, 270, 240, 48, 18);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.font = "900 22px 'Rubik'";
+  ctx.fillStyle = "#05090d";
+  ctx.fillText("RESTART", canvas.width / 2, 302);
+
+  ctx.textAlign = "left";
+}
 
     function updateGame() {
       frame++;
       score += 0.25;
       speed += 0.0030;
+      if (shieldActive) {
+        shieldTimer--;
+
+        if (shieldTimer <= 0) {
+          shieldActive = false;
+          shieldTimer = 0;
+        }
+      }
+
+      if (doublePointsActive) {
+        doublePointsTimer--;
+
+        if (doublePointsTimer <= 0) {
+          doublePointsActive = false;
+          doublePointsTimer = 0;
+        }
+      }
+
+      if (magnetActive) {
+        magnetTimer--;
+
+        if (magnetTimer <= 0) {
+          magnetActive = false;
+          magnetTimer = 0;
+        }
+      }
 
       player.update();
 
@@ -882,25 +1111,75 @@ this.y = groundY - this.height;
       }   
 
       if (frame % 68 === 0) {
-        chips.push(new ChipCollectible());
+        const spawnRoll = Math.random();
+
+        if (spawnRoll < 0.55) {
+          const powerRoll = Math.random();
+          let powerType;
+
+          if (powerRoll < 0.4) {
+            powerType = "doublePoints";
+          } else if (powerRoll < 0.7) {
+            powerType = "shield";
+          } else {
+            powerType = "magnet";
+          }
+
+          powerUps.push(new PowerUp(powerType));
+        } else {
+          chips.push(new ChipCollectible());
+        }
       }
 
       obstacles.forEach(obstacle => obstacle.update());
       chips.forEach(chip => chip.update());
+      if (magnetActive) {
+        chips.forEach(chip => {
+          const targetX = player.x + player.width / 2;
+          const targetY = player.y + player.height / 2;
+
+          const dx = targetX - chip.x;
+          const dy = targetY - chip.y;
+
+          const distance = Math.sqrt(dx * dx + dy * dy);
+
+          if (distance < 500) {
+            const pullStrength = Math.min(0.4, 0.08 + speed * 0.025);
+
+            chip.x += dx * pullStrength;
+            chip.y += dy * pullStrength;
+          }
+        });
+      }
       particles.forEach(particle => particle.update());
       floatingTexts.forEach(text => text.update());
+      powerUps.forEach(powerUp => powerUp.update());
 
       obstacles = obstacles.filter(obstacle => obstacle.x + obstacle.width > -20);
-      chips = chips.filter(chip => chip.x + chip.radius > -20 && !chip.collected);
+      chips = chips.filter(chip => {
+        const missedChip = chip.x + chip.radius <= -20 && !chip.collected;
+
+        if (missedChip) {
+          chipCombo = 0;
+          scoreMultiplier = 1;
+          comboTimer = 0;
+        }
+
+        return chip.x + chip.radius > -20 && !chip.collected;
+      });
       particles = particles.filter(particle => particle.life > 0);
       floatingTexts = floatingTexts.filter(text => text.life > 0);
+      powerUps = powerUps.filter(powerUp => powerUp.x + powerUp.width > -20 && !powerUp.collected);
 
       obstacles.forEach(obstacle => {
         if (isColliding(player, obstacle)) {
-          gameState = "gameover";
-          if (score > highScore) {
-            highScore = Math.floor(score);
-            localStorage.setItem("taqueritosHighScore", highScore);
+          if (!shieldActive) {
+            gameState = "gameover";
+
+            if (score > highScore) {
+              highScore = Math.floor(score);
+              localStorage.setItem("taqueritosHighScore", highScore);
+            }
           }
         }
       });
@@ -908,21 +1187,157 @@ this.y = groundY - this.height;
       chips.forEach(chip => {
         if (isCollecting(player, chip)) {
           chip.collected = true;
-          score += chip.type === "bag" ? 150 : 75;
+
+          scoreMultiplier = 1 + chipCombo * 0.1;
+
+          const basePoints = chip.type === "bag" ? 150 : 75;
+          const powerMultiplier = doublePointsActive ? 2 : 1;
+          const totalMultiplier = scoreMultiplier * powerMultiplier;
+
+          score += basePoints * totalMultiplier;
+
+          floatingTexts.push(
+            new FloatingText(
+              totalMultiplier.toFixed(1) + "x",
+              chip.x,
+              chip.y - 45,
+              doublePointsActive ? "#ffa61f" : "#fff7d6"
+            )
+          );
+
+          chipCombo++;
+          comboTimer = 120;
+
           spawnPickupEffect(chip.x, chip.y, chip.type === "bag" ? 22 : 14);
+        }
+      });
+
+      powerUps.forEach(powerUp => {
+        if (isCollectingPowerUp(player, powerUp)) {
+          powerUp.collected = true;
+          powerUp.applyEffect();
+
+          floatingTexts.push(new FloatingText("SHIELD!", powerUp.x, powerUp.y - 20));
+          spawnPickupEffect(powerUp.x, powerUp.y, 22);
         }
       });
 
       updateHud();
     }
 
+    function drawPlayerShield() {
+      if (!shieldActive) return;
+
+      const isBlinkPhase = shieldTimer <= shieldBlinkDuration;
+      let shouldDraw = true;
+
+      if (isBlinkPhase) {
+        const elapsedBlink = shieldBlinkDuration - shieldTimer;
+
+        // Force shield to stay invisible at the very end
+        if (shieldTimer < 12) {
+          shouldDraw = false;
+        } else {
+          const progress = elapsedBlink / shieldBlinkDuration;
+
+          const startingBlinkSpeed = 20;
+          const endingBlinkSpeed = 5;
+
+          const blinkSpeed =
+            startingBlinkSpeed - progress * (startingBlinkSpeed - endingBlinkSpeed);
+
+          shouldDraw = Math.floor(elapsedBlink / blinkSpeed) % 2 === 0;
+        }
+      }
+
+      if (!shouldDraw) return;
+
+      const shieldOffsetX = 8;   // positive = right, negative = left
+      const shieldOffsetY = 0;   // positive = down, negative = up
+
+      const centerX = player.x + player.width / 2 + shieldOffsetX;
+      const centerY = player.y + player.height / 2 + shieldOffsetY;
+      const radius = 75 + Math.sin(frame * 0.08) * 4;
+
+      ctx.save();
+
+      const bubble = ctx.createRadialGradient(
+        centerX - 24,
+        centerY - 28,
+        3,
+        centerX,
+        centerY,
+        radius
+      );
+
+      bubble.addColorStop(0, "rgba(255, 255, 255, 0.85)");
+      bubble.addColorStop(0.13, "rgba(255, 255, 255, 0.25)");
+      bubble.addColorStop(0.45, "rgba(0, 174, 234, 0.28)");
+      bubble.addColorStop(1, "rgba(0, 174, 234, 0.08)");
+
+      ctx.fillStyle = bubble;
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.strokeStyle = "rgba(0, 174, 234, 0.9)";
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.restore();
+    }
+
+    function drawDoublePointsEffect() {
+      if (!doublePointsActive) return;
+
+      const pulse = 0.25 + Math.sin(frame * 0.12) * 0.08;
+
+      ctx.save();
+
+      ctx.strokeStyle = `rgba(255, 166, 31, ${pulse})`;
+      ctx.lineWidth = 18;
+      ctx.strokeRect(9, 9, canvas.width - 18, canvas.height - 18);
+
+      ctx.fillStyle = `rgba(255, 166, 31, ${pulse * 0.18})`;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      ctx.restore();
+    }
+
+    function drawMagnetEffect() {
+      if (!magnetActive) return;
+
+      const centerX = player.x + player.width / 2;
+      const centerY = player.y + player.height / 2;
+
+      ctx.save();
+      ctx.strokeStyle = "rgba(255, 59, 59, 0.35)";
+      ctx.lineWidth = 3;
+
+      for (let i = 0; i < 3; i++) {
+        const radius = 90 + i * 35 + Math.sin(frame * 0.08 + i) * 8;
+
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      ctx.restore();
+    }
+
     function drawGame() {
       drawBackground();
+      drawDoublePointsEffect();
       chips.forEach(chip => chip.draw());
       obstacles.forEach(obstacle => obstacle.draw());
       player.draw();
+      drawPlayerShield();
+      drawMagnetEffect();
       particles.forEach(particle => particle.draw());
       floatingTexts.forEach(text => text.draw());
+      powerUps.forEach(powerUp => powerUp.draw());
 
       ctx.fillStyle = "#6c2b16";
       ctx.font = "900 18px 'Rubik', Arial";
@@ -944,12 +1359,35 @@ this.y = groundY - this.height;
     }
 
     function handleJumpOrStart() {
-      if (gameState === "start" || gameState === "gameover") {
+      if (gameState === "start") {
         resetGame();
-      } else {
+      } else if (gameState === "playing") {
         player.jump();
       }
     }
+
+    canvas.addEventListener("click", event => {
+  if (gameState !== "gameover") return;
+
+  const rect = canvas.getBoundingClientRect();
+
+  const mouseX = (event.clientX - rect.left) * (canvas.width / rect.width);
+  const mouseY = (event.clientY - rect.top) * (canvas.height / rect.height);
+
+  const buttonX = 330;
+  const buttonY = 270;
+  const buttonW = 240;
+  const buttonH = 48;
+
+  if (
+    mouseX >= buttonX &&
+    mouseX <= buttonX + buttonW &&
+    mouseY >= buttonY &&
+    mouseY <= buttonY + buttonH
+  ) {
+    resetGame();
+  }
+});
 
     startBtn.addEventListener("click", resetGame);
     restartBtn.addEventListener("click", resetGame);
