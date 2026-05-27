@@ -55,21 +55,35 @@
     }
 
     .hud {
-      display: flex;
-      justify-content: space-between;
-      gap: 12px;
-      flex-wrap: wrap;
-      margin-bottom: 10px;
-      font-weight: 900;
-      font-family: "Rubik", Arial, sans-serif;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+      margin-bottom: 12px;
     }
 
-    .hud div {
-      background: rgba(255, 255, 255, 0.72);
+    .hud-card {
+      background: rgba(5, 9, 13, 0.82);
+      border: 3px solid #00aeea;
+      border-radius: 16px;
       padding: 10px 14px;
-      border: 3px solid #6c2b16;
-      border-radius: 12px;
-      box-shadow: 0 4px 0 #6c2b16;
+      box-shadow: 0 5px 0 #05090d;
+    }
+
+    .hud-label {
+      display: block;
+      font-size: 0.75rem;
+      font-weight: 900;
+      color: #ffa61f;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .hud-value {
+      display: block;
+      font-family: "Luckiest Guy";
+      font-size: 1.7rem;
+      color: #fff7d6;
+      text-shadow: 2px 2px 0 #05090d;
     }
 
     canvas {
@@ -131,9 +145,20 @@
     <p class="tagline">Jump, dodge, collect chips, and outrun the blandness.</p>
 
     <div class="hud">
-      <div>Score: <span id="score">0</span></div>
-      <div>High Score: <span id="highScore">0</span></div>
-      <div>Discount Progress: <span id="discount">0%</span></div>
+      <div class="hud-card">
+        <span class="hud-label">Score</span>
+        <span id="score" class="hud-value">0</span>
+      </div>
+
+      <div class="hud-card">
+        <span class="hud-label">High Score</span>
+        <span id="highScore" class="hud-value">0</span>
+      </div>
+
+      <div class="hud-card">
+        <span class="hud-label">Discount</span>
+        <span id="discount" class="hud-value">0%</span>
+      </div>
     </div>
 
     <canvas id="gameCanvas" width="900" height="420"></canvas>
@@ -142,8 +167,10 @@
       <button id="startBtn">Start Game</button>
       <button id="jumpBtn">Jump / Tap</button>
       <button id="restartBtn">Restart</button>
+      <button id="pauseBtn">Pause</button>
     </div>
 
+    
     <p class="note">Controls: Space, Arrow Up, W, or tap the Jump button. Reach 1000 points to unlock a 10% discount code demo.</p>
   </div>
 
@@ -157,6 +184,7 @@
     const startBtn = document.getElementById("startBtn");
     const jumpBtn = document.getElementById("jumpBtn");
     const restartBtn = document.getElementById("restartBtn");
+    const pauseBtn = document.getElementById("pauseBtn");
 
     // Put PNG/JPEG files in a folder called "assets" next to this HTML file.
     // If the files are missing, the game automatically uses drawn fallback shapes.
@@ -189,6 +217,7 @@
       "audio/music/video-game-music_loop-06.wav"
     ];
 
+
     let currentMusic = null;
     let musicFadeInterval = null;
 
@@ -208,6 +237,7 @@
 
     function playSound(sound) {
       sound.currentTime = 0;
+      sound.volume = sfxVolumeLevel;
       sound.play().catch(() => {});
     }
 
@@ -226,7 +256,7 @@
 
       currentMusic = new Audio(randomTrack);
       currentMusic.loop = true;
-      currentMusic.volume = 0.35;
+      currentMusic.volume = musicVolumeLevel;
       currentMusic.play().catch(() => {});
     }
 
@@ -255,14 +285,14 @@
     }
 
     function playDeathSoundWithFade() {
-      fadeOutMusic(1300);
+      fadeOutMusic(1500);
 
       sounds.death.currentTime = 0;
       sounds.death.volume = 0.7;
       sounds.death.play().catch(() => {});
 
       let deathVolume = 0;
-      const targetVolume = 0.8;
+      const targetVolume = 1;
       const steps = 20;
 
       const deathFade = setInterval(() => {
@@ -297,6 +327,9 @@
     let magnetActive = false;
     let magnetTimer = 0;
     const magnetDuration = 600;
+    let screenShake = 0;
+    let musicVolumeLevel = 0.35;
+    let sfxVolumeLevel = 0.6;
 
 
     let chipCombo = 0;
@@ -1120,59 +1153,122 @@ applyEffect() {
       ctx.textAlign = "left";
     }
 
+    function drawVolumeSlider(label, x, y, value) {
+      const width = 300;
+      const height = 12;
+
+      ctx.textAlign = "left";
+      ctx.font = "900 18px 'Rubik'";
+      ctx.fillStyle = "#05090d";
+      ctx.fillText(label, x, y - 10);
+
+      ctx.fillStyle = "rgba(5, 9, 13, 0.22)";
+      ctx.beginPath();
+      ctx.roundRect(x, y, width, height, 8);
+      ctx.fill();
+
+      ctx.fillStyle = "#00aeea";
+      ctx.beginPath();
+      ctx.roundRect(x, y, width * value, height, 8);
+      ctx.fill();
+
+      ctx.fillStyle = "#ffa61f";
+      ctx.strokeStyle = "#05090d";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(x + width * value, y + height / 2, 12, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.textAlign = "right";
+      ctx.fillStyle = "#05090d";
+      ctx.fillText(Math.round(value * 100) + "%", x + width, y - 10);
+    }
+
+    function drawPauseScreen() {
+      ctx.fillStyle = "rgba(5, 9, 13, 0.75)";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      ctx.fillStyle = "rgba(255, 247, 214, 0.95)";
+      ctx.strokeStyle = "#05090d";
+      ctx.lineWidth = 6;
+      ctx.beginPath();
+      ctx.roundRect(235, 70, 430, 300, 24);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.textAlign = "center";
+      ctx.font = "56px 'Luckiest Guy'";
+      ctx.fillStyle = "#ffa61f";
+      ctx.strokeStyle = "#05090d";
+      ctx.lineWidth = 5;
+      ctx.strokeText("Paused", canvas.width / 2, 140);
+      ctx.fillText("Paused", canvas.width / 2, 140);
+
+      drawVolumeSlider("Music", 300, 195, musicVolumeLevel);
+      drawVolumeSlider("SFX", 300, 255, sfxVolumeLevel);
+
+      ctx.font = "900 16px 'Rubik'";
+      ctx.fillStyle = "#05090d";
+      ctx.textAlign = "center";
+      ctx.fillText("Press Escape or Pause to resume", canvas.width / 2, 330);
+
+      ctx.textAlign = "left";
+    }
+
     function drawGameOverScreen() {
-  ctx.fillStyle = "rgba(5, 9, 13, 0.78)";
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = "rgba(5, 9, 13, 0.78)";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  ctx.textAlign = "center";
+      ctx.textAlign = "center";
 
-  // container box
-  ctx.fillStyle = "rgba(255, 247, 214, 0.94)";
-  ctx.strokeStyle = "#05090d";
-  ctx.lineWidth = 6;
-  ctx.beginPath();
-  ctx.roundRect(180, 70, 540, 265, 24);
-  ctx.fill();
-  ctx.stroke();
+      // container box
+      ctx.fillStyle = "rgba(255, 247, 214, 0.94)";
+      ctx.strokeStyle = "#05090d";
+      ctx.lineWidth = 6;
+      ctx.beginPath();
+      ctx.roundRect(180, 70, 540, 265, 24);
+      ctx.fill();
+      ctx.stroke();
 
-  // title
-  ctx.font = "64px 'Luckiest Guy'";
-  ctx.lineWidth = 6;
-  ctx.strokeStyle = "#05090d";
-  ctx.fillStyle = "#ffa61f";
-  ctx.strokeText("Game Over", canvas.width / 2, 140);
-  ctx.fillText("Game Over", canvas.width / 2, 140);
+      // title
+      ctx.font = "64px 'Luckiest Guy'";
+      ctx.lineWidth = 6;
+      ctx.strokeStyle = "#05090d";
+      ctx.fillStyle = "#ffa61f";
+      ctx.strokeText("Game Over", canvas.width / 2, 140);
+      ctx.fillText("Game Over", canvas.width / 2, 140);
 
-  // score
-  ctx.font = "900 28px 'Rubik'";
-  ctx.fillStyle = "#05090d";
-  ctx.fillText("Final Score: " + Math.floor(score), canvas.width / 2, 190);
+      // score
+      ctx.font = "900 28px 'Rubik'";
+      ctx.fillStyle = "#05090d";
+      ctx.fillText("Final Score: " + Math.floor(score), canvas.width / 2, 190);
 
-  // discount
-  ctx.font = "900 22px 'Rubik'";
-  if (score >= 1000) {
-    ctx.fillStyle = "#1fa659";
-    ctx.fillText("10% Code Unlocked: CRUNCH10", canvas.width / 2, 235);
-  } else {
-    ctx.fillStyle = "#00aeea";
-    ctx.fillText("Reach 1000 points to unlock a code", canvas.width / 2, 235);
-  }
+      // discount
+      ctx.font = "900 22px 'Rubik'";
+      if (score >= 1000) {
+        ctx.fillStyle = "#1fa659";
+        ctx.fillText("10% Code Unlocked: CRUNCH10", canvas.width / 2, 235);
+      } else {
+        ctx.fillStyle = "#00aeea";
+        ctx.fillText("Reach 1000 points to unlock a code", canvas.width / 2, 235);
+      }
 
-  // button
-  ctx.fillStyle = "#ffa61f";
-  ctx.strokeStyle = "#05090d";
-  ctx.lineWidth = 5;
-  ctx.beginPath();
-  ctx.roundRect(330, 270, 240, 48, 18);
-  ctx.fill();
-  ctx.stroke();
+      // button
+      ctx.fillStyle = "#ffa61f";
+      ctx.strokeStyle = "#05090d";
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.roundRect(330, 270, 240, 48, 18);
+      ctx.fill();
+      ctx.stroke();
 
-  ctx.font = "900 22px 'Rubik'";
-  ctx.fillStyle = "#05090d";
-  ctx.fillText("RESTART", canvas.width / 2, 302);
+      ctx.font = "900 22px 'Rubik'";
+      ctx.fillStyle = "#05090d";
+      ctx.fillText("RESTART", canvas.width / 2, 302);
 
-  ctx.textAlign = "left";
-}
+      ctx.textAlign = "left";
+    }
 
     function updateGame() {
       frame++;
@@ -1278,7 +1374,12 @@ applyEffect() {
         if (isColliding(player, obstacle)) {
           if (!shieldActive) {
             playDeathSoundWithFade();
-            gameState = "gameover";
+            screenShake = 30;
+            speed = 0.3;
+            setTimeout(() => {
+              gameState = "gameover";
+            }, 100);
+                        
 
             if (score > highScore) {
               highScore = Math.floor(score);
@@ -1433,22 +1534,131 @@ applyEffect() {
       ctx.restore();
     }
 
+    function drawPowerUpTimers() {
+      const activePowers = [];
+
+      if (shieldActive) {
+        activePowers.push({
+          type: "shield",
+          timer: shieldTimer,
+          max: shieldDuration + shieldBlinkDuration,
+          color: "#00aeea",
+          label: "S"
+        });
+      }
+
+      if (doublePointsActive) {
+        activePowers.push({
+          type: "doublePoints",
+          timer: doublePointsTimer,
+          max: doublePointsDuration,
+          color: "#ffa61f",
+          label: "2X"
+        });
+      }
+
+      if (magnetActive) {
+        activePowers.push({
+          type: "magnet",
+          timer: magnetTimer,
+          max: magnetDuration,
+          color: "#ff3b3b",
+          label: "M"
+        });
+      }
+
+      activePowers.forEach((power, index) => {
+        const x = 55 + index * 87;
+        const y = 55;
+        const radius = 26;
+
+        const progress = power.timer / power.max;
+        const endAngle = -Math.PI / 2 + Math.PI * 2 * progress;
+
+        // background bubble
+        ctx.save();
+        ctx.fillStyle = "rgba(5, 9, 13, 0.78)";
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.25)";
+        ctx.lineWidth = 3;
+
+        ctx.beginPath();
+        ctx.arc(x, y, radius + 6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        // timer ring
+        ctx.strokeStyle = power.color;
+        ctx.lineWidth = 6;
+        ctx.lineCap = "round";
+        ctx.beginPath();
+        ctx.arc(x, y, radius + 6, -Math.PI / 2, endAngle, false);
+        ctx.stroke();
+
+        // inner icon circle
+        ctx.fillStyle = "rgba(255, 255, 255, 0.08)";
+        ctx.beginPath();
+        ctx.arc(x, y, radius, 0, Math.PI * 2);
+        ctx.fill();
+
+        // icon / label
+        if (power.type === "shield" && images.shield.loaded) {
+          ctx.drawImage(images.shield, x - 50, y - 40, 100, 80);
+        } else if (power.type === "doublePoints") {
+          ctx.font = "900 18px 'Rubik'";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.lineWidth = 4;
+          ctx.strokeStyle = "#05090d";
+          ctx.fillStyle = "#ffa61f";
+          ctx.strokeText("2X", x, y + 1);
+          ctx.fillText("2X", x, y + 1);
+          ctx.textBaseline = "alphabetic";
+        } else if (power.type === "magnet" && images.magnet.loaded) {
+            ctx.drawImage(images.magnet, x - 104, y - 89, 208, 175);
+          }
+
+        ctx.restore();
+      });
+    }
+
     function drawGame() {
       drawBackground();
+
+      let shakeX = 0;
+      let shakeY = 0;
+
+      if (screenShake > 0) {
+        shakeX = (Math.random() - 0.5) * screenShake;
+        shakeY = (Math.random() - 0.5) * screenShake;
+        screenShake *= 0.85;
+
+        if (screenShake < 0.5) {
+          screenShake = 0;
+        }
+      }
+
+      ctx.save();
+      ctx.translate(shakeX, shakeY);
+
       drawDoublePointsEffect();
+
       chips.forEach(chip => chip.draw());
+      powerUps.forEach(powerUp => powerUp.draw());
       obstacles.forEach(obstacle => obstacle.draw());
+
       player.draw();
       drawPlayerShield();
       drawMagnetEffect();
+
       particles.forEach(particle => particle.draw());
       floatingTexts.forEach(text => text.draw());
-      powerUps.forEach(powerUp => powerUp.draw());
 
-      ctx.fillStyle = "#6c2b16";
-      ctx.font = "900 18px 'Rubik', Arial";
-      ctx.fillText("Speed: " + speed.toFixed(1), 20, 34);
+      ctx.restore();
+
+      // UI does not shake
+      drawPowerUpTimers();
     }
+
 
     function gameLoop() {
       if (gameState === "start") {
@@ -1456,6 +1666,9 @@ applyEffect() {
       } else if (gameState === "playing") {
         updateGame();
         drawGame();
+      } else if (gameState === "paused") {
+        drawGame();
+        drawPauseScreen();
       } else if (gameState === "gameover") {
         drawGame();
         drawGameOverScreen();
@@ -1471,6 +1684,16 @@ applyEffect() {
         player.jump();
       }
     }
+
+    function togglePause() {
+  if (gameState === "playing") {
+    gameState = "paused";
+    if (currentMusic) currentMusic.pause();
+  } else if (gameState === "paused") {
+    gameState = "playing";
+    if (currentMusic) currentMusic.play().catch(() => {});
+  }
+}
 
     canvas.addEventListener("click", event => {
   if (gameState !== "gameover") return;
@@ -1498,18 +1721,25 @@ applyEffect() {
     startBtn.addEventListener("click", resetGame);
     restartBtn.addEventListener("click", resetGame);
     jumpBtn.addEventListener("click", handleJumpOrStart);
+    
 
     document.addEventListener("keydown", event => {
-  if (["Space", "ArrowUp", "KeyW"].includes(event.code)) {
-    event.preventDefault();
-    handleJumpOrStart();
-  }
 
-  if (["ArrowDown", "KeyS"].includes(event.code)) {
-    event.preventDefault();
-    player.setCrouch(true);
-  }
-});
+      if (event.code === "Escape") {
+        event.preventDefault();
+        togglePause();
+        return;
+      }
+      if (["Space", "ArrowUp", "KeyW"].includes(event.code)) {
+        event.preventDefault();
+        handleJumpOrStart();
+      }
+
+      if (["ArrowDown", "KeyS"].includes(event.code)) {
+        event.preventDefault();
+        player.setCrouch(true);
+      }
+    });
 
 document.addEventListener("keyup", event => {
   if (["ArrowDown", "KeyS"].includes(event.code)) {
@@ -1518,7 +1748,58 @@ document.addEventListener("keyup", event => {
   }
 });
 
-    canvas.addEventListener("pointerdown", handleJumpOrStart);
+pauseBtn.addEventListener("click", togglePause);
+
+canvas.addEventListener("pointerdown", event => {
+  if (gameState === "paused") {
+    handlePauseSlider(event);
+  }
+});
+
+canvas.addEventListener("pointermove", event => {
+  if (draggingSlider && gameState === "paused") {
+    handlePauseSlider(event);
+  }
+});
+
+canvas.addEventListener("pointerup", () => {
+  draggingSlider = null;
+});
+
+  let draggingSlider = null;
+
+    function handlePauseSlider(event) {
+      if (gameState !== "paused") return;
+
+      const rect = canvas.getBoundingClientRect();
+      const mouseX = (event.clientX - rect.left) * (canvas.width / rect.width);
+      const mouseY = (event.clientY - rect.top) * (canvas.height / rect.height);
+
+      const sliders = [
+        { name: "music", x: 300, y: 195, width: 300 },
+        { name: "sfx", x: 300, y: 255, width: 300 }
+      ];
+
+      sliders.forEach(slider => {
+        if (
+          mouseX >= slider.x &&
+          mouseX <= slider.x + slider.width &&
+          mouseY >= slider.y - 18 &&
+          mouseY <= slider.y + 30
+        ) {
+          const value = Math.max(0, Math.min(1, (mouseX - slider.x) / slider.width));
+
+          if (slider.name === "music") {
+            musicVolumeLevel = value;
+            if (currentMusic) currentMusic.volume = musicVolumeLevel;
+          } else {
+            sfxVolumeLevel = value;
+          }
+
+          draggingSlider = slider.name;
+        }
+      });
+    }
 
     gameLoop();
   </script>
